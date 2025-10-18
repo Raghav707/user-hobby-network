@@ -1,0 +1,22 @@
+# File: user-hobby-network/.gitignore
+
+# Node.js
+node_modules/
+dist/
+.pnpm-store/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
