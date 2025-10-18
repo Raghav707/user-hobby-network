@@ -1,16 +1,20 @@
 // File: backend/src/db.ts
 
-import pg from 'pg';
+import pg, { type QueryResult } from 'pg'; // 👈 1. Import QueryResult here
 
 // Create a new "Pool" of connections.
-// This is the efficient way to manage database connections.
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 // We export a query function that will be used by our entire application
 // It automatically handles getting a connection from the pool and releasing it.
-export const query = (text: string, params?: any[]) => {
+
+// 👇 2. Add the explicit return type: Promise<QueryResult>
+export const query = (
+  text: string,
+  params?: any[]
+): Promise<QueryResult> => {
   return pool.query(text, params);
 };
 
