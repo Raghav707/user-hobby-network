@@ -275,8 +275,28 @@ export const createFriendship = async (req: Request, res: Response) => {
 
     const newFriendship = await query(sql, [idA, idB]);
 
-    // 6. Send back the new friendship link
-    res.status(201).json(newFriendship.rows[0]);
+    // 6. Friendship created! Now fetch the updated data for both users
+
+    // Use Promise.all to fetch both users and their scores/friends efficiently
+    const [userAData, userBData, scoreA, scoreB, friendsA, friendsB] = await Promise.all([
+        query('SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users WHERE id = $1', [userIdA]), // Use original userIdA
+        query('SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users WHERE id = $1', [userIdB]), // Use original userIdB
+        calculateScoreForUser(userIdA), // Calculate score for user A
+        calculateScoreForUser(userIdB), // Calculate score for user B
+        getFriendsForUser(userIdA),     // Get friends for user A
+        getFriendsForUser(userIdB)      // Get friends for user B
+    ]);
+
+    // Check if users were found (should not happen if friendship was created, but good practice)
+    if (!userAData.rowCount || !userBData.rowCount) {
+        return res.status(404).json({ message: 'One or both users not found after creating friendship.' });
+    }
+
+    const userA = { ...userAData.rows[0], popularityScore: scoreA, friends: friendsA };
+    const userB = { ...userBData.rows[0], popularityScore: scoreB, friends: friendsB };
+
+    // 7. Send back both updated user objects
+    res.status(201).json({ userA, userB });
   } catch (err: any) {
     console.error(err);
 
@@ -349,8 +369,33 @@ export const removeFriendship = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Friendship not found" });
     }
 
-    // 7. Send a 204 No Content success response
-    res.status(204).send();
+    // --- Keep the code above this line ---
+
+    // 7. Friendship removed! Now fetch the updated data for both users
+
+    // Use Promise.all to fetch both users and their scores/friends efficiently
+    const [userAData, userBData, scoreA, scoreB, friendsA, friendsB] = await Promise.all([
+        query('SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users WHERE id = $1', [userIdA]), // Use original userIdA from params
+        query('SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users WHERE id = $1', [userIdB]), // Use original userIdB from body
+        calculateScoreForUser(userIdA), // Recalculate score for user A
+        calculateScoreForUser(userIdB), // Recalculate score for user B
+        getFriendsForUser(userIdA),     // Get new friends for user A
+        getFriendsForUser(userIdB)      // Get new friends for user B
+    ]);
+
+    // Check if users were found (should not happen if friendship existed, but good practice)
+    if (!userAData.rowCount || !userBData.rowCount) {
+        // If users don't exist, maybe send 204 since the link is gone anyway, or handle as error
+         console.error("User not found after removing friendship, this shouldn't happen.");
+         // Sending 204 as the link is indeed removed.
+         return res.status(204).send(); 
+    }
+
+    const userA = { ...userAData.rows[0], popularityScore: scoreA, friends: friendsA };
+    const userB = { ...userBData.rows[0], popularityScore: scoreB, friends: friendsB };
+
+    // 8. Send back both updated user objects with status 200 OK
+    res.status(200).json({ userA, userB });
   } catch (err: any) {
     console.error(err);
 
