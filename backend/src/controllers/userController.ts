@@ -1,18 +1,55 @@
 // File: backend/src/controllers/userController.ts
 
 import type { Request, Response } from 'express';
-import { query } from '../db.js'; // 👈 1. IMPORT our query function
+import { query } from '../db.js';
+import {
+  calculatePopularityScore,
+  getFriendsForUser,
+  calculateScoreForUser,
+} from '../services/userService.js';
+
+// File: backend/src/controllers/userController.ts
 
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Public
 export const getAllUsers = async (req: Request, res: Response) => {
-  // 👇 2. ADD ASYNC and a try...catch block
   try {
-    const result = await query('SELECT * FROM users');
+    // 1. Fetch all users and all friendships in parallel (it's faster!)
+    const [usersResult, friendshipsResult] = await Promise.all([
+      query(
+        'SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users ORDER BY "createdAt" ASC'
+      ),
+      query('SELECT * FROM friendships'),
+    ]);
 
-    // 3. Send the actual users from the database
-    res.json(result.rows);
+    const allUsers = usersResult.rows;
+    const allFriendships = friendshipsResult.rows;
+
+    // 2. Map over each user to add the full data
+    const fullUsers = allUsers.map((user) => {
+      // Get this user's friends
+      const friendIds = allFriendships
+        .filter((f) => f.user_id_a === user.id || f.user_id_b === user.id)
+        .map((f) => (f.user_id_a === user.id ? f.user_id_b : f.user_id_a));
+
+      // Calculate their score (re-using the logic from our graph endpoint)
+      const popularityScore = calculatePopularityScore(
+        user,
+        allUsers,
+        allFriendships
+      );
+
+      // 3. Return the complete user object
+      return {
+        ...user,
+        friends: friendIds,
+        popularityScore,
+      };
+    });
+
+    res.json(fullUsers);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -31,36 +68,44 @@ export const createUser = async (req: Request, res: Response) => {
 
     // 1. A simple check to make sure we got the data
     if (!username || !age) {
-      return res.status(400).json({ message: 'Please provide a username and age' });
+      return res
+        .status(400)
+        .json({ message: "Please provide a username and age" });
     }
 
     // 2. This is our SQL command to insert a new user
     const sql = `
       INSERT INTO users (username, age, hobbies)
       VALUES ($1, $2, $3)
-      RETURNING *;
+      RETURNING id, username, age, hobbies, created_at AS "createdAt";
     `;
     // $1, $2, $3 are placeholders to prevent SQL injection (a security risk!)
 
     // 3. We run the query with our data
     const newUser = await query(sql, [username, age, hobbies || []]); // Use hobbies or an empty array
 
-    // 4. Send back the newly created user from the database
-    res.status(201).json(newUser.rows[0]);
+    // 4. Get the user data
+    const createdUser = newUser.rows[0];
 
-  } catch (err: any) { // We can check for specific errors
+    // 5. Send back the complete user object, matching the PDF spec
+    res.status(201).json({
+      ...createdUser,
+      friends: [], // A new user has no friends
+      popularityScore: 0, // A new user has a score of 0
+    });
+  } catch (err: any) {
+    // We can check for specific errors
     console.error(err);
 
     // This is a common error code for a "unique constraint violation"
     // (like if the username already exists)
-    if (err.code === '23505') { 
-      return res.status(409).json({ message: 'Username already exists' });
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "Username already exists" });
     }
 
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 // File: backend/src/controllers/userController.ts
 // ... (keep getAllUsers and createUser functions above) ...
@@ -76,10 +121,10 @@ export const updateUser = async (req: Request, res: Response) => {
     const { username, age, hobbies } = req.body;
 
     // 3. First, find the user to make sure they exist
-    const userResult = await query('SELECT * FROM users WHERE id = $1', [id]);
+    const userResult = await query("SELECT * FROM users WHERE id = $1", [id]);
 
     if (!userResult.rowCount) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const existingUser = userResult.rows[0];
@@ -94,37 +139,48 @@ export const updateUser = async (req: Request, res: Response) => {
       UPDATE users
       SET username = $1, age = $2, hobbies = $3
       WHERE id = $4
-      RETURNING *;
+      RETURNING id, username, age, hobbies, created_at AS "createdAt";
     `;
 
     const updatedResult = await query(updateSql, [
       updatedUsername,
       updatedAge,
       updatedHobbies,
-      id
+      id,
     ]);
 
-    // 6. Send back the fully updated user
-    res.json(updatedResult.rows[0]);
+    // 6. Get the main updated user data
+    const updatedUser = updatedResult.rows[0];
 
+    // 7. Now, fetch the new friends and score for the complete response
+    // We run these in parallel to be fast!
+    const [friends, popularityScore] = await Promise.all([
+      getFriendsForUser(updatedUser.id),
+      calculateScoreForUser(updatedUser.id)
+    ]);
+
+    // 8. Send back the complete user object
+    res.json({
+      ...updatedUser,
+      friends,
+      popularityScore
+    });
   } catch (err: any) {
     console.error(err);
 
     // Check for "unique username" conflict
-    if (err.code === '23505') { 
-      return res.status(409).json({ message: 'Username already exists' });
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "Username already exists" });
     }
 
     // Check for "invalid uuid" format
-    if (err.code === '22P02') {
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "Invalid user ID format" });
     }
 
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 // File: backend/src/controllers/userController.ts
 // ... (keep getAllUsers, createUser, and updateUser functions above) ...
@@ -147,35 +203,33 @@ export const deleteUser = async (req: Request, res: Response) => {
     // 2. If a friendship exists (rowCount > 0), block the deletion
     if (friendshipResult && friendshipResult.rowCount) {
       return res.status(409).json({
-        message: 'Cannot delete user. Please remove all friendships first.'
+        message: "Cannot delete user. Please remove all friendships first.",
       });
     }
 
     // 3. If no friendships, proceed with deletion
-    const deleteSql = 'DELETE FROM users WHERE id = $1 RETURNING *;';
+    const deleteSql = "DELETE FROM users WHERE id = $1 RETURNING *;";
     const deleteResult = await query(deleteSql, [id]);
 
     // 4. Check if a user was actually found and deleted
     if (deleteResult.rowCount === 0) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     // 5. Send a success response
     // 204 No Content is a standard, great response for a successful delete
     res.status(204).send();
-
   } catch (err: any) {
     console.error(err);
 
     // Check for "invalid uuid" format
-    if (err.code === '22P02') {
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "Invalid user ID format" });
     }
 
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 // File: backend/src/controllers/userController.ts
 // ... (keep all other functions above) ...
@@ -192,17 +246,23 @@ export const createFriendship = async (req: Request, res: Response) => {
 
     // 3. Validation
     if (!userIdA) {
-      return res.status(400).json({ message: 'User ID is required in the URL' });
+      return res
+        .status(400)
+        .json({ message: "User ID is required in the URL" });
     }
     if (!userIdB) {
-      return res.status(400).json({ message: 'friendId is required in the body' });
+      return res
+        .status(400)
+        .json({ message: "friendId is required in the body" });
     }
     if (userIdA === userIdB) {
-      return res.status(400).json({ message: 'Cannot create friendship with oneself' });
+      return res
+        .status(400)
+        .json({ message: "Cannot create friendship with oneself" });
     }
 
     // 4. BUSINESS LOGIC: Ensure user_id_a is always the smaller ID
-    // This automatically handles the "Circular Friendship Prevention" 
+    // This automatically handles the "Circular Friendship Prevention"
     const idA = userIdA < userIdB ? userIdA : userIdB;
     const idB = userIdA < userIdB ? userIdB : userIdA;
 
@@ -217,30 +277,29 @@ export const createFriendship = async (req: Request, res: Response) => {
 
     // 6. Send back the new friendship link
     res.status(201).json(newFriendship.rows[0]);
-
   } catch (err: any) {
     console.error(err);
 
     // Check for "unique constraint violation" (they are already friends)
-    if (err.code === '23505') { 
-      return res.status(409).json({ message: 'These users are already friends' });
+    if (err.code === "23505") {
+      return res
+        .status(409)
+        .json({ message: "These users are already friends" });
     }
 
     // Check for "foreign key violation" (one of the user IDs doesn't exist)
-    if (err.code === '23503') {
-      return res.status(404).json({ message: 'One or both users not found' });
+    if (err.code === "23503") {
+      return res.status(404).json({ message: "One or both users not found" });
     }
 
     // Check for "invalid uuid" format
-    if (err.code === '22P02') {
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "Invalid user ID format" });
     }
 
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 // File: backend/src/controllers/userController.ts
 // ... (keep all other functions above) ...
@@ -257,13 +316,19 @@ export const removeFriendship = async (req: Request, res: Response) => {
 
     // 3. Validation
     if (!userIdA) {
-      return res.status(400).json({ message: 'User ID is required in the URL' });
+      return res
+        .status(400)
+        .json({ message: "User ID is required in the URL" });
     }
     if (!userIdB) {
-      return res.status(400).json({ message: 'friendId is required in the body' });
+      return res
+        .status(400)
+        .json({ message: "friendId is required in the body" });
     }
     if (userIdA === userIdB) {
-      return res.status(400).json({ message: 'Cannot remove friendship with oneself' });
+      return res
+        .status(400)
+        .json({ message: "Cannot remove friendship with oneself" });
     }
 
     // 4. BUSINESS LOGIC: Find the correct order of IDs
@@ -281,20 +346,71 @@ export const removeFriendship = async (req: Request, res: Response) => {
 
     // 6. Check if a friendship was actually found and deleted
     if (!deleteResult.rowCount) {
-      return res.status(404).json({ message: 'Friendship not found' });
+      return res.status(404).json({ message: "Friendship not found" });
     }
 
     // 7. Send a 204 No Content success response
     res.status(204).send();
-
   } catch (err: any) {
     console.error(err);
 
     // Check for "invalid uuid" format
-    if (err.code === '22P02') {
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "Invalid user ID format" });
     }
 
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// File: backend/src/controllers/userController.ts
+// ... (keep all other functions above) ...
+
+// Helper function to calculate the popularity score
+// Logic: number of unique friends + (total hobbies shared with friends * 0.5)
+
+// @desc    Get all users and friendship data for graph visualization
+// @route   GET /api/graph
+// @access  Public
+export const getGraphData = async (req: Request, res: Response) => {
+  try {
+    // 1. Fetch all users
+    const usersResult = await query(
+      'SELECT id, username, age, hobbies, created_at AS "createdAt" FROM users ORDER BY "createdAt" ASC'
+    );
+    const allUsers = usersResult.rows;
+
+    // 2. Fetch all friendships
+    const friendshipsResult = await query("SELECT * FROM friendships");
+    const allFriendships = friendshipsResult.rows;
+
+    // 3. Calculate popularity score for each user
+    const usersWithScores = allUsers.map((user) => {
+      const popularityScore = calculatePopularityScore(
+        user,
+        allUsers,
+        allFriendships
+      );
+
+      // 4. Also attach a simple list of friends (their IDs) for the graph
+      const friendIds = allFriendships
+        .filter((f) => f.user_id_a === user.id || f.user_id_b === user.id)
+        .map((f) => (f.user_id_a === user.id ? f.user_id_b : f.user_id_a));
+
+      return {
+        ...user,
+        popularityScore,
+        friends: friendIds,
+      };
+    });
+
+    // 5. Send back the combined data
+    res.json({
+      users: usersWithScores,
+      friendships: allFriendships,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
