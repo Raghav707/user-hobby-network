@@ -1,8 +1,8 @@
 // File: backend/src/index.ts
-
 import 'dotenv/config';
 import express, { type Express } from 'express';
 import apiRoutes from './routes/index.js';
+import cors from 'cors';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
@@ -11,10 +11,34 @@ import swaggerUi from 'swagger-ui-express';
 export const app: Express = express();
 
 // --- Configure the App ---
-app.use(express.json());
 
 // Define the port
 const PORT = process.env.PORT || 3001;
+
+// READ ALLOWED FRONTEND ORIGINS FROM ENV (comma-separated)
+const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// (Optional) public URL for swagger server list; fallback to local
+const BACKEND_PUBLIC_URL = process.env.BACKEND_PUBLIC_URL || `http://localhost:${PORT}`;
+
+app.use(express.json());
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN, // ✅ allow only these origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false, // set true only if you plan to use cookies
+  })
+);
+
+// good caching hygiene for proxies/cdn
+app.use((req, res, next) => {
+  res.setHeader('Vary', 'Origin');
+  next();
+});
 
 // --- Mount Routes ---
 app.get('/', (req, res) => {
@@ -34,20 +58,19 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${PORT}`,
-        description: 'Development server',
+        url: BACKEND_PUBLIC_URL,
+        description: 'API server',
       },
-    ], // <--- Add comma here if needed
-    // 👇 ADD THIS ENTIRE BLOCK 👇
+    ],
     components: {
       schemas: {
         User: {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid', description: 'Unique identifier for the user' },
-            username: { type: 'string', description: 'User\'s unique name' },
-            age: { type: 'integer', description: 'User\'s age' },
-            hobbies: { type: 'array', items: { type: 'string' }, description: 'List of user\'s hobbies' },
+            username: { type: 'string', description: "User's unique name" },
+            age: { type: 'integer', description: "User's age" },
+            hobbies: { type: 'array', items: { type: 'string' }, description: "List of user's hobbies" },
             friends: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'List of friend user IDs' },
             createdAt: { type: 'string', format: 'date-time', description: 'Timestamp when the user was created' },
             popularityScore: { type: 'number', format: 'float', description: 'Calculated popularity score' }
@@ -56,7 +79,6 @@ const swaggerOptions = {
         }
       }
     }
-    // 👆 END OF BLOCK TO ADD 👆
   },
   apis: ['./src/routes/*.ts', './src/controllers/*.ts'],
 };
