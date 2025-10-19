@@ -33,6 +33,7 @@ const userRouter: Router = Router();
  *         description: Internal Server Error
  */
 
+
 // GET /api/users
 userRouter.get('/', getAllUsers);
 
@@ -82,6 +83,7 @@ userRouter.get('/', getAllUsers);
 
 // POST /api/users
 userRouter.post('/', createUser);
+
 
 /**
  * @openapi
@@ -138,6 +140,8 @@ userRouter.post('/', createUser);
 // PUT /api/users/:id
 userRouter.put('/:id', updateUser);
 
+
+
 /**
  * @openapi
  * /api/users/{id}:
@@ -169,6 +173,7 @@ userRouter.put('/:id', updateUser);
 
 // DELETE /api/users/:id
 userRouter.delete('/:id', deleteUser);
+
 
 /**
  * @openapi
@@ -202,18 +207,16 @@ userRouter.delete('/:id', deleteUser);
  *               - friendId
  *     responses:
  *       '201':
- *         description: Friendship created successfully. Returns the friendship record.
+ *         description: Friendship created successfully. Returns both updated user objects.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 user_id_a:
- *                   type: string
- *                   format: uuid
- *                 user_id_b:
- *                   type: string
- *                   format: uuid
+ *                 userA:
+ *                   $ref: '#/components/schemas/User'
+ *                 userB:
+ *                   $ref: '#/components/schemas/User'
  *       '400':
  *         description: Bad Request (e.g., missing friendId, linking user to themself, invalid ID format)
  *       '404':
@@ -226,6 +229,8 @@ userRouter.delete('/:id', deleteUser);
 
 // POST /api/users/:id/link
 userRouter.post('/:id/link', createFriendship);
+
+
 
 /**
  * @openapi
@@ -258,8 +263,17 @@ userRouter.post('/:id/link', createFriendship);
  *             required:
  *               - friendId
  *     responses:
- *       '204':
- *         description: Friendship removed successfully. No content returned.
+ *       '200':
+ *         description: Friendship removed successfully. Returns both updated user objects.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userA:
+ *                   $ref: '#/components/schemas/User'
+ *                 userB:
+ *                   $ref: '#/components/schemas/User'
  *       '400':
  *         description: Bad Request (e.g., missing friendId, unlinking user from themself, invalid ID format)
  *       '404':

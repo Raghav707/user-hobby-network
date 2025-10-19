@@ -72,6 +72,9 @@ export const createUser = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "Please provide a username and age" });
     }
+    if (typeof age !== 'number' || !Number.isInteger(age) || age < 0) {
+      return res.status(400).json({ message: 'Age must be a positive integer' });
+    }
 
     // 2. This is our SQL command to insert a new user
     const sql = `
@@ -119,6 +122,10 @@ export const updateUser = async (req: Request, res: Response) => {
     const { id } = req.params;
     // 2. Get the new data from the body
     const { username, age, hobbies } = req.body;
+
+    if (age !== undefined && (typeof age !== 'number' || !Number.isInteger(age) || age < 0)) {
+      return res.status(400).json({ message: 'Age must be a positive integer' });
+    }
 
     // 3. First, find the user to make sure they exist
     const userResult = await query("SELECT * FROM users WHERE id = $1", [id]);

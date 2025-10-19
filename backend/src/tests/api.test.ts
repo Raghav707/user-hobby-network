@@ -129,3 +129,91 @@ describe('Popularity Score Calculation (Complex)', () => {
     expect(userC.popularityScore).toBe(1.5);
   });
 });
+
+// --- NEW: Test Suite for Input Validation ---
+describe('Input Validation', () => {
+    let existingUserId: string; // We'll need a valid user ID for some tests
+
+    beforeAll(async () => {
+        // Clean up and create one user for testing update/delete with invalid ID
+        await pool.query('DELETE FROM friendships');
+        await pool.query('DELETE FROM users');
+        const res = await request(app).post('/api/users').send({ username: 'ValidationUser', age: 50, hobbies: [] });
+        existingUserId = res.body.id;
+    });
+
+    afterAll(async () => {
+         // Clean up users created in this suite
+         await pool.query('DELETE FROM users WHERE username LIKE $1', ['Validation%']);
+    });
+
+    // Test invalid data type for POST /users
+    it('should return 400 if age is not a number during creation', async () => {
+        const res = await request(app)
+            .post('/api/users')
+            .send({ username: 'ValidationFailAge', age: 'not-a-number', hobbies: [] });
+        expect(res.statusCode).toBe(400);
+         // You might want to add more specific error message checking here later
+         // expect(res.body.message).toContain('age must be a number');
+    });
+
+     // Test invalid data type for PUT /users/:id
+     it('should return 400 if age is not a number during update', async () => {
+         const res = await request(app)
+             .put(`/api/users/${existingUserId}`)
+             .send({ age: 'wrong-type' });
+         expect(res.statusCode).toBe(400);
+          // Add specific message check if your validation provides it
+     });
+
+    // Test invalid UUID format for PUT /users/:id
+    it('should return 400 if user ID format is invalid for update', async () => {
+        const res = await request(app)
+            .put('/api/users/invalid-uuid-format')
+            .send({ age: 55 });
+        expect(res.statusCode).toBe(400);
+        expect(res.body.message).toContain('Invalid user ID format');
+    });
+
+    // Test invalid UUID format for DELETE /users/:id
+    it('should return 400 if user ID format is invalid for delete', async () => {
+        const res = await request(app).delete('/api/users/invalid-uuid-format');
+        expect(res.statusCode).toBe(400);
+        expect(res.body.message).toContain('Invalid user ID format');
+    });
+
+     // Test invalid UUID format for POST /users/:id/link (path param)
+     it('should return 400 if user ID format is invalid for link (path)', async () => {
+         const res = await request(app)
+             .post(`/api/users/invalid-uuid/link`)
+             .send({ friendId: existingUserId }); // Need a valid friend ID here
+         expect(res.statusCode).toBe(400);
+         expect(res.body.message).toContain('Invalid user ID format');
+     });
+
+     // Test invalid UUID format for POST /users/:id/link (body param)
+     it('should return 400 if friendId format is invalid for link (body)', async () => {
+         const res = await request(app)
+             .post(`/api/users/${existingUserId}/link`)
+             .send({ friendId: 'invalid-uuid-friend' });
+         expect(res.statusCode).toBe(400);
+         expect(res.body.message).toContain('Invalid user ID format');
+     });
+
+     // Similar tests for DELETE /users/:id/unlink can be added...
+     it('should return 400 if user ID format is invalid for unlink (path)', async () => {
+         const res = await request(app)
+             .delete(`/api/users/invalid-uuid/unlink`)
+             .send({ friendId: existingUserId });
+         expect(res.statusCode).toBe(400);
+         expect(res.body.message).toContain('Invalid user ID format');
+     });
+     it('should return 400 if friendId format is invalid for unlink (body)', async () => {
+          const res = await request(app)
+              .delete(`/api/users/${existingUserId}/unlink`)
+              .send({ friendId: 'invalid-uuid-friend' });
+          expect(res.statusCode).toBe(400);
+          expect(res.body.message).toContain('Invalid user ID format');
+      });
+
+});
