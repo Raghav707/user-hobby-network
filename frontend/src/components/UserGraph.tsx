@@ -55,6 +55,11 @@ export default function UserGraph() {
       const centerY = 260;
 
       const flowNodes: RFNode<RFNodeData>[] = data.users.map((user, index) => {
+        if (typeof user.hobbies === 'string') {
+          user.hobbies = (user.hobbies as any).split(',').filter(Boolean);
+        } else if (!user.hobbies) {
+          user.hobbies = []; // Also protect against null/undefined
+        }
         const angle = count ? (index / count) * 2 * Math.PI : 0;
         const x = centerX + radius * Math.cos(angle);
         const y = centerY + radius * Math.sin(angle);
