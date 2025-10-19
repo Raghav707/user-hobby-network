@@ -39,11 +39,17 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
+    "skipLibCheck": true
   },
 
-    "ts-node": {
+  "ts-node": {
     "esm": true,
-    "experimentalSpecifierResolution": "node",
-  }
+    "experimentalSpecifierResolution": "node"
+  },
+
+  "exclude": [
+    "node_modules",
+    "vitest.config.ts",
+    "init-db.ts"
+  ]
 }
