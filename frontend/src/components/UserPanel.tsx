@@ -36,16 +36,18 @@ export default function UserPanel() {
       try {
         const dirtyList = await fetchUsers();
 
-        // ✅ NEW FIX: Clean the bad data from /api/users
+        // ✅ FINAL, SAFER FIX: Clean the bad data from /api/users
         const cleanList = dirtyList.map(user => ({
           ...user,
           // This makes sure hobbies is ALWAYS an array
-          hobbies: Array.isArray(user.hobbies) ? user.hobbies : []
+          hobbies: (typeof user.hobbies === 'string')
+            ? (user.hobbies as any).split(',').filter(Boolean)
+            : Array.isArray(user.hobbies) ? user.hobbies : []
         }));
         
         setUsers(cleanList); // <-- Use the clean list
         const all = new Set<string>();
-        cleanList.forEach((u) => u.hobbies.forEach((h) => all.add(h))); // <-- Use the clean list
+        cleanList.forEach((u) => u.hobbies.forEach((h: string) => all.add(h))); // <-- FIXED! // <-- Use the clean list
         setHobbies([...all].sort());
 
       } catch (e: any) {
@@ -111,16 +113,18 @@ export default function UserPanel() {
         try {
           const dirtyList = await fetchUsers();
 
-          // ✅ NEW FIX: Clean the bad data from /api/users
+          // ✅ FINAL, SAFER FIX: Clean the bad data from /api/users
           const cleanList = dirtyList.map(user => ({
             ...user,
             // This makes sure hobbies is ALWAYS an array
-            hobbies: Array.isArray(user.hobbies) ? user.hobbies : []
+            hobbies: (typeof user.hobbies === 'string')
+              ? (user.hobbies as any).split(',').filter(Boolean)
+              : Array.isArray(user.hobbies) ? user.hobbies : []
           }));
 
           setUsers(cleanList); // <-- Use the clean list
           const all = new Set<string>();
-          cleanList.forEach((u) => u.hobbies.forEach((h) => all.add(h))); // <-- Use the clean list
+          cleanList.forEach((u) => u.hobbies.forEach((h: string) => all.add(h))); // <-- FIXED! // <-- Use the clean list
           setHobbies([...all].sort());
 
         } catch (e: any) {

@@ -1,3 +1,4 @@
+// File: frontend/src/components/UserGraph.tsx
 import { useState, useEffect, useCallback } from 'react';
 import ReactFlow, {
   Background,
@@ -55,26 +56,34 @@ export default function UserGraph() {
       const centerY = 260;
 
       const flowNodes: RFNode<RFNodeData>[] = data.users.map((user, index) => {
-        if (typeof user.hobbies === 'string') {
-          user.hobbies = (user.hobbies as any).split(',').filter(Boolean);
-        } else if (!user.hobbies) {
-          user.hobbies = []; // Also protect against null/undefined
-        }
+        // ✅ FINAL, SAFER FIX:
+        // 1. Clean the hobbies data
+        const cleanHobbies = (typeof user.hobbies === 'string')
+  ? (user.hobbies as any).split(',').filter(Boolean) // <-- FIXED!
+  : Array.isArray(user.hobbies) ? user.hobbies : [];
+
+        // 2. Create a clean user object
+        const cleanUser = {
+          ...user,
+          hobbies: cleanHobbies,
+        };
+
+        // 3. Use the clean user data from now on
         const angle = count ? (index / count) * 2 * Math.PI : 0;
         const x = centerX + radius * Math.cos(angle);
         const y = centerY + radius * Math.sin(angle);
 
-        const score = user.popularityScore ?? 0;
+        const score = cleanUser.popularityScore ?? 0;
         const type = score > 5 ? 'high' : 'low';
 
         return {
-          id: user.id,
+          id: cleanUser.id,
           type,
           position: { x, y },
           data: {
-            label: `${user.username} (Age: ${user.age})`,
-            userData: user,
-            _version: `${user.id}-${user.popularityScore}`,
+            label: `${cleanUser.username} (Age: ${cleanUser.age})`,
+            userData: cleanUser, // <-- We now pass the 100% safe user object
+            _version: `${cleanUser.id}-${cleanUser.popularityScore}`,
           },
         };
       });
