@@ -34,11 +34,20 @@ export default function UserPanel() {
   useEffect(() => {
     (async () => {
       try {
-        const list = await fetchUsers();
-        setUsers(list);
+        const dirtyList = await fetchUsers();
+
+        // ✅ NEW FIX: Clean the bad data from /api/users
+        const cleanList = dirtyList.map(user => ({
+          ...user,
+          // This makes sure hobbies is ALWAYS an array
+          hobbies: Array.isArray(user.hobbies) ? user.hobbies : []
+        }));
+        
+        setUsers(cleanList); // <-- Use the clean list
         const all = new Set<string>();
-        list.forEach((u) => u.hobbies.forEach((h) => all.add(h)));
+        cleanList.forEach((u) => u.hobbies.forEach((h) => all.add(h))); // <-- Use the clean list
         setHobbies([...all].sort());
+
       } catch (e: any) {
         toast.error(e?.message || 'Failed to fetch users');
       }
@@ -100,11 +109,20 @@ export default function UserPanel() {
         // 2. INSTEAD, just re-fetch the ENTIRE list of users
         // This is the same code from your useEffect hook!
         try {
-          const list = await fetchUsers();
-          setUsers(list);
+          const dirtyList = await fetchUsers();
+
+          // ✅ NEW FIX: Clean the bad data from /api/users
+          const cleanList = dirtyList.map(user => ({
+            ...user,
+            // This makes sure hobbies is ALWAYS an array
+            hobbies: Array.isArray(user.hobbies) ? user.hobbies : []
+          }));
+
+          setUsers(cleanList); // <-- Use the clean list
           const all = new Set<string>();
-          list.forEach((u) => u.hobbies.forEach((h) => all.add(h)));
+          cleanList.forEach((u) => u.hobbies.forEach((h) => all.add(h))); // <-- Use the clean list
           setHobbies([...all].sort());
+
         } catch (e: any) {
           toast.error(e?.message || 'Failed to fetch users');
         }
