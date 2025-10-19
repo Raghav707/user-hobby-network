@@ -94,18 +94,25 @@ export default function UserPanel() {
         toast.success('User updated');
       } else {
         // CREATE
-        const created = await createUser(payload);
-
-        // prepend to list
-        setUsers((prev) => [created, ...prev]);
-
-        // update hobby cloud (array, not callback)
-        const merged = new Set<string>([...hobbies, ...created.hobbies]);
-        setHobbies([...merged].sort());
-
+        await createUser(payload); // 1. Create the user, but ignore the broken object it returns
         toast.success('User created');
+
+        // 2. INSTEAD, just re-fetch the ENTIRE list of users
+        // This is the same code from your useEffect hook!
+        try {
+          const list = await fetchUsers();
+          setUsers(list);
+          const all = new Set<string>();
+          list.forEach((u) => u.hobbies.forEach((h) => all.add(h)));
+          setHobbies([...all].sort());
+        } catch (e: any) {
+          toast.error(e?.message || 'Failed to fetch users');
+        }
+
+        // 3. We still refresh the graph
         refresh();
       }
+
 
       // clear selection + form
       setSelectedId(null);
