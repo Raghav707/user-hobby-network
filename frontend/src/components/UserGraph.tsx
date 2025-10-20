@@ -32,7 +32,7 @@ export const edgeTypes = {};
 
 // ✅ UPDATED: removed prop, use refreshVersion from context
 export default function UserGraph() {
-  const { pushHistory, refreshVersion } = useApp();
+  const { pushHistory, refreshVersion, currentNodePositions } = useApp(); // ✅ Get currentNodePositions
 
   // ✅ nodes are React Flow Nodes whose .data is RFNodeData
   const [nodes, setNodes, _onNodesChange] = useNodesState<RFNodeData>([]);
@@ -59,8 +59,8 @@ export default function UserGraph() {
         // ✅ FINAL, SAFER FIX:
         // 1. Clean the hobbies data
         const cleanHobbies = (typeof user.hobbies === 'string')
-  ? (user.hobbies as any).split(',').filter(Boolean) // <-- FIXED!
-  : Array.isArray(user.hobbies) ? user.hobbies : [];
+          ? (user.hobbies as any).split(',').filter(Boolean)
+          : Array.isArray(user.hobbies) ? user.hobbies : [];
 
         // 2. Create a clean user object
         const cleanUser = {
@@ -109,28 +109,37 @@ export default function UserGraph() {
     load();
   }, [load, refreshVersion]); // ✅ still uses refreshVersion
 
-  // replace your onNodesChange with this:
-  const onNodesChangeWrapped = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((nds) => {
-        const updated = applyNodeChanges(changes, nds);
-        // whenever positions changed, store snapshot
-        const moved = changes.some(c => c.type === 'position' || c.type === 'dimensions');
-        if (moved) {
-          // small debounce via microtask to ensure updated positions are captured
-          queueMicrotask(() => pushHistory(updated as any));
-        }
-        return updated;
-      });
-    },
-    [setNodes, pushHistory]
-  );
+  // --- ✅ NEW EFFECT TO APPLY HISTORY ---
+ useEffect(() => {
+     console.log('History effect running. currentNodePositions:', currentNodePositions); // ✅ ADD LOG
+     // Only apply if we have a valid state from history
+     if (currentNodePositions && currentNodePositions.length > 0) { 
+         console.log("Applying history state:", currentNodePositions); // ✅ ADD LOG
+         setNodes(currentNodes => 
+             currentNodes.map(node => {
+                 // Find the matching node position in the history state
+                 const historyNode = currentNodePositions.find(hn => hn.id === node.id);
+                 // If found, update this node's position; otherwise, keep its current position
+                 return historyNode ? { ...node, position: historyNode.position } : node;
+             })
+         );
+     } else {
+         console.log("No valid history state to apply."); // ✅ ADD LOG
+     }
+     // Note: We don't run this when currentNodePositions is null (initial state)
+     // or empty, to avoid potentially clearing the initial layout.
+ }, [currentNodePositions, setNodes]); // Depend on the history state and the setter function
+ // --- END NEW EFFECT ---
 
-  useEffect(() => {
-    // listen for undo/redo via context return values
-    // we don't have an event, so we patch positions if history changed
-    // (TopBar calls undo/redo which updates context state; user will click Refresh if needed)
-  }, []);
+ // replace your onNodesChange with this:
+ const onNodesChangeWrapped = useCallback(
+   (changes: NodeChange[]) => {
+     setNodes((nds) => applyNodeChanges(changes, nds)); // Simplified!
+   },
+   [setNodes] // Removed pushHistory from dependencies
+ );
+
+  // Removed the empty useEffect here
 
   /** LINK: draw connection A -> B to create friendship */
   const onConnect = useCallback(
@@ -217,7 +226,8 @@ export default function UserGraph() {
 
         // node.data is already RFNodeData because of our hook generic
         const user = node.data.userData;
-        const userHobbies = [...(user.hobbies ?? [])];
+        // Use the cleaned hobbies for includes check
+        const userHobbies = [...(user.hobbies ?? [])]; 
 
         if (userHobbies.includes(hobby)) {
           toast.info('User already has this hobby');
@@ -225,14 +235,15 @@ export default function UserGraph() {
         }
 
         const updated = [...userHobbies, hobby];
-        await updateUserDebounced(selectedNodeId, { hobbies: updated });
+        // Ensure hobbies are sent correctly if updateUserDebounced expects an array
+        await updateUserDebounced(selectedNodeId, { hobbies: updated }); 
         toast.success(`Added hobby "${hobby}"`);
         await load();
       } catch (err: any) {
         toast.error(err?.message || 'Failed to add hobby');
       }
     },
-    [selectedNodeId, nodes, load]
+    [selectedNodeId, nodes, load] // Added `nodes` dependency as it's used inside
   );
 
   if (isLoading)
@@ -274,6 +285,7 @@ export default function UserGraph() {
         onSelectionChange={onSelectionChange}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onNodeDragStop={(_event, _node, nodes) => pushHistory(nodes)}
         fitView
         proOptions={{ hideAttribution: true }}
         nodeTypes={nodeTypes}

@@ -152,7 +152,7 @@ export const updateUser = async (req: Request, res: Response) => {
     const updatedResult = await query(updateSql, [
       updatedUsername,
       updatedAge,
-      updatedHobbies,
+      JSON.stringify(updatedHobbies || []),
       id,
     ]);
 

@@ -78,7 +78,7 @@ export default function UserPanel() {
     } else {
       reset({ username: '', age: 18, hobbies: '' });
     }
-  }, [selected, reset]);
+  }, [selectedId, reset]);
 
   // ✅ Step 2: Replace onSubmit
   async function onSubmit(values: FormValues) {
