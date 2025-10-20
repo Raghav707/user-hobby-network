@@ -85,7 +85,7 @@ export const createUser = async (req: Request, res: Response) => {
     // $1, $2, $3 are placeholders to prevent SQL injection (a security risk!)
 
     // 3. We run the query with our data
-    const newUser = await query(sql, [username, age, hobbies || []]); // Use hobbies or an empty array
+    const newUser = await query(sql, [username, age, JSON.stringify(hobbies || [])]); // Use hobbies or an empty array
 
     // 4. Get the user data
     const createdUser = newUser.rows[0];
